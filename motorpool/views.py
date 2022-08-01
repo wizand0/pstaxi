@@ -21,5 +21,7 @@ def brand_detail(request, pk):
     context = {
         'brand': brand,
         'cars': brand.cars.all(),
+        'brand_number': Brand.objects.count(),
     }
     return render(request, 'motorpool/brand_detail.html', context)
+
