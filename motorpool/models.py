@@ -1,11 +1,19 @@
+from django.conf import settings
 from django.db import models
 from utils.models import generate_unique_slug
 from django.urls import reverse
+from django.utils.text import slugify
+from unidecode import unidecode
 
 
 class Brand(models.Model):
     title = models.CharField(max_length=100)
     slug = models.SlugField(max_length=210, default='', blank=True)
+    logo = models.ImageField(upload_to='motorpool/brands/', blank=True, null=True)
+
+    @property
+    def logo_url(self):
+        return self.logo.url if self.logo else f'{settings.STATIC_URL}images/brand-car.png'
 
     def __str__(self):
         return self.title
@@ -33,6 +41,17 @@ class Option(models.Model):
         verbose_name = 'Опция'
 
 
+def get_upload_to_auto(instance, filename):
+    full_file_name = 'motorpool/auto'
+    if instance.brand:
+        if instance.brand.slug:
+            full_file_name += f'/{instance.brand.slug}'
+        else:
+            full_file_name += f'/{slugify(unidecode(instance.brand.title), allow_unicode=True)}'
+        full_file_name += f'/{filename}'
+    return full_file_name
+
+
 class AutoManagerVolvo(models.Manager):
     def get_queryset(self):
         return super().get_queryset().filter(brand__title='Volvo')
@@ -55,6 +74,7 @@ class Auto(models.Model):
     description = models.TextField(max_length=1000, default='', blank=True)
     year = models.SmallIntegerField(null=True)
     auto_class = models.CharField(max_length=1, null=True, choices=AUTO_CLASS_CHOICES, default=AUTO_CLASS_ECONOMY)
+    logo = models.ImageField(upload_to=get_upload_to_auto, blank=True, null=True)
 
     def display_engine_power(self):
         return self.pts.engine_power

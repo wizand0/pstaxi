@@ -7,6 +7,7 @@
 <hr>
 {% include "motorpool/_brand_number.html" %}
 <p>Все автомобили бренда {{ brand }}:</p>
+<img src="{{ brand.logo_url }}" alt="{{ brand.title }}">
 <ol>
     {% for car in cars %}
         <li>{{ car.number }} ({{ car.year }})</li>
