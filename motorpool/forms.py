@@ -1,4 +1,27 @@
 from django import forms
+from motorpool.models import Brand
+
+
+class BrandCreationForm(forms.ModelForm):
+    class Meta:
+        model = Brand
+        fields = ('title', 'logo')
+
+    def clean(self):
+        cleaned_data = super().clean()
+        title = cleaned_data.get('title')
+
+        if Brand.objects.filter(title=title).exists():
+            raise forms.ValidationError(f'Бренд с названием {title} уже существует')
+
+        return cleaned_data
+
+
+class BrandUpdateForm(forms.ModelForm):
+    class Meta:
+        model = Brand
+        fields = ('title', 'logo')
+
 
 
 class SendEmailForm(forms.Form):

@@ -1,10 +1,53 @@
-from django.views.generic import DetailView, ListView
 from django.shortcuts import render
-from motorpool.forms import SendEmailForm
+
+from django.urls import reverse_lazy
 from django.contrib import messages
+
+from django.http import HttpResponseForbidden
+
+from django.views.generic import DetailView, ListView, CreateView, UpdateView, DeleteView
+
+from motorpool.forms import SendEmailForm, BrandCreationForm, BrandUpdateForm
 
 
 from motorpool.models import Brand
+
+
+class BrandCreateView(CreateView):
+    model = Brand
+    template_name = 'motorpool/brand_create.html'
+    form_class = BrandCreationForm
+    success_url = reverse_lazy('motorpool:brand_list')
+
+    def get(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return HttpResponseForbidden('Недостаточно прав для добавления нового объекта')
+        return super().get(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        messages.success(self.request, 'Новый бренд создан успешно')
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, form.non_field_errors())
+        return super().form_invalid(form)
+
+
+class BrandUpdateView(UpdateView):
+    model = Brand
+    template_name = 'motorpool/brand_update.html'
+    form_class = BrandUpdateForm
+
+
+class BrandDeleteView(DeleteView):
+    model = Brand
+    template_name = 'motorpool/brand_delete.html'
+    success_url = reverse_lazy('motorpool:brand_list')
+
+    def delete(self, request, *args, **kwargs):
+        result = super().delete(request, *args, **kwargs)
+        messages.success(request, f'Бренд {self.object} удален')
+        return result
 
 
 class BrandListView(ListView):
@@ -20,7 +63,6 @@ class BrandListView(ListView):
     def get_queryset(self):
         queryset = super().get_queryset()
         return queryset.order_by('-pk')
-
 
 
 class BrandDetailView(DetailView):
@@ -42,6 +84,7 @@ class BrandDetailView(DetailView):
     def get_template_names(self):
         default_template_names = super().get_template_names()
         return default_template_names
+
 
 def send_email_view(request):
     if request.method == 'POST':
@@ -74,5 +117,3 @@ def send_email_view(request):
 
     # Передаем форму в контекст с именем form
     return render(request, 'motorpool/send_email.html', {'form': form})
-
-
