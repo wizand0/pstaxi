@@ -1,28 +1,33 @@
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 
 from django.urls import reverse_lazy
 from django.contrib import messages
 
-from django.http import HttpResponseForbidden
+from django.http import HttpResponseForbidden, HttpResponseRedirect
 
-from django.views.generic import DetailView, ListView, CreateView, UpdateView, DeleteView
+from django.views.generic import DetailView, ListView, CreateView, UpdateView, DeleteView, TemplateView
+from django.views.generic.edit import ProcessFormView
 
-from motorpool.forms import SendEmailForm, BrandCreationForm, BrandUpdateForm
+from motorpool.forms import (SendEmailForm, BrandCreationForm, BrandUpdateForm,
+                             AutoFormSet, BrandAddToFavoriteForm)
 
 
-from motorpool.models import Brand
+from motorpool.models import Brand, Favorite
 
 
-class BrandCreateView(CreateView):
-    model = Brand
-    template_name = 'motorpool/brand_create.html'
-    form_class = BrandCreationForm
-    success_url = reverse_lazy('motorpool:brand_list')
-
+class LoginRequiredMixin:
     def get(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
             return HttpResponseForbidden('Недостаточно прав для добавления нового объекта')
         return super().get(request, *args, **kwargs)
+
+
+
+class BrandCreateView(LoginRequiredMixin, CreateView):
+    model = Brand
+    template_name = 'motorpool/brand_create.html'
+    form_class = BrandCreationForm
+    success_url = reverse_lazy('motorpool:brand_list')
 
     def form_valid(self, form):
         messages.success(self.request, 'Новый бренд создан успешно')
@@ -79,6 +84,7 @@ class BrandDetailView(DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['cars'] = self.object.cars.all()
+        context['favorite_form'] = BrandAddToFavoriteForm(initial={'user': self.request.user, 'brand': self.object})
         return context
 
     def get_template_names(self):
@@ -117,3 +123,53 @@ def send_email_view(request):
 
     # Передаем форму в контекст с именем form
     return render(request, 'motorpool/send_email.html', {'form': form})
+
+
+class AutoCreateView(LoginRequiredMixin, ProcessFormView, TemplateView):
+
+    template_name = 'motorpool/auto_create.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        brand = get_object_or_404(Brand, pk=self.kwargs.get('brand_pk', ''))
+        if self.request.method == 'POST':
+            formset = AutoFormSet(self.request.POST, self.request.FILES, instance=brand)
+        else:
+            formset = AutoFormSet(instance=brand)
+        context['formset'] = formset
+        return context
+
+    def get(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return HttpResponseForbidden('Недостаточно прав для добавления нового объекта')
+    def post(self, request, *args, **kwargs):
+        brand = get_object_or_404(Brand, pk=kwargs.get('brand_pk', ''))
+        formset = AutoFormSet(request.POST, request.FILES, instance=brand)
+        if formset.is_valid():
+            formset.save()
+            return HttpResponseRedirect(brand.get_absolute_url())
+        return super().get(request, *args, **kwargs)
+
+
+class BrandAddToFavoriteView(LoginRequiredMixin, CreateView):
+    model = Favorite
+    form_class = BrandAddToFavoriteForm
+
+    def get_success_url(self):
+        return self.object.brand.get_absolute_url()
+
+    def form_invalid(self, form):
+        messages.error(self.request, form.non_field_errors())
+        brand = form.cleaned_data.get('brand', None)
+        if not brand:
+            brand = get_object_or_404(Brand, pk=form.data.get('brand'))
+        redirect_url = brand.get_absolute_url() if brand else reverse_lazy('motorpool:brand_list')
+        return HttpResponseRedirect(redirect_url)
+
+    def form_valid(self, form):
+        messages.success(self.request, f'Бренд {form.cleaned_data["brand"]} добавлен в избранное')
+        return super().form_valid(form)
+
+
+
+

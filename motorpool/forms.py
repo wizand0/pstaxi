@@ -1,5 +1,25 @@
 from django import forms
-from motorpool.models import Brand
+from motorpool.models import Brand, Auto, Favorite
+
+
+
+class AutoCreationForm(forms.ModelForm):
+    class Meta:
+        model = Auto
+        exclude = ['brand', 'id']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        fields_form_select = ('number', 'year', 'options', 'auto_class')
+        fields_form_control = ('number', 'year', 'description')
+        for field in fields_form_select:
+            self.fields[field].widget.attrs.update({'class': 'form-select'})
+        for field in fields_form_control:
+            self.fields[field].widget.attrs.update({'class': 'form-control'})
+        self.fields['options'].widget.attrs.update({'multiple': True})
+        self.fields['description'].widget.attrs.update({'rows': 3})
+
+
 
 
 class BrandCreationForm(forms.ModelForm):
@@ -83,3 +103,55 @@ class SendEmailForm(forms.Form):
         if len(variants) < 2:
             raise forms.ValidationError('Нужно выбрать минимум 2 варианта')
         return variants
+
+
+class BaseAutoCreationFormSet(forms.BaseInlineFormSet):
+    def get_queryset(self):
+        return Auto.objects.none()
+
+    def clean(self):
+        """Проверим что добавляемые автомобили не имеют одинаковых номеров"""
+
+        if any(self.errors):
+            # если какая-либо из форм не прошла проверку, то ничего не выполняем
+            return
+
+        all_forms_is_empty = True
+        numbers = []
+        for form in self.forms:
+            if self.can_delete and self._should_delete_form(form):
+                # если форма помечена как удаленная, то пропускаем ее
+                continue
+            all_forms_is_empty = all_forms_is_empty and not any(form.cleaned_data)
+            number = form.cleaned_data.get('number')
+            if number and number in numbers:
+                raise forms.ValidationError(f"В наборе присутствуют машины с одинаковым номером: {number}")
+            numbers.append(number)
+
+        if all_forms_is_empty:
+            raise forms.ValidationError("Все формы пустые. Заполните данные.")
+
+
+AutoFormSet = forms.inlineformset_factory(Brand, Auto, form=AutoCreationForm, formset=BaseAutoCreationFormSet, extra=2)
+
+
+class BrandAddToFavoriteForm(forms.ModelForm):
+    class Meta:
+        model = Favorite
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields:
+            self.fields[field].widget = forms.HiddenInput()
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        if Favorite.objects.filter(user=cleaned_data['user'], brand=cleaned_data['brand']).exists():
+            raise forms.ValidationError(f'Бренд уже добавлен в избранное')
+
+        return cleaned_data
+
+
+
